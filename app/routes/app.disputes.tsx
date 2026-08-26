@@ -6,9 +6,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getOrCreateMerchant } from "../models/merchant.server";
 import { fileDispute, resolveDispute } from "../disputes/service.server";
-
-const DISPUTE_TYPES = ["DAMAGED", "MISPRINT", "LOST"];
-const DISPUTE_STATUSES = ["OPEN", "IN_REVIEW", "RESOLVED", "REJECTED"];
+import { DISPUTE_STATUSES, DISPUTE_TYPES } from "../disputes/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);

@@ -80,6 +80,7 @@ export async function routeOrder(orderId: string): Promise<RouteOrderResult> {
       partnerUnavailable = true;
       logger.error("routing.partner_unavailable", {
         orderId: order.id,
+        correlationId: order.correlationId,
         partnerId: partner.id,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -137,6 +138,7 @@ export async function routeOrder(orderId: string): Promise<RouteOrderResult> {
 
   logger.info("routing.decision_complete", {
     orderId: order.id,
+    correlationId: order.correlationId,
     groupsRouted,
     groupsFailed,
     durationMs: Date.now() - start,

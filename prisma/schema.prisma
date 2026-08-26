@@ -180,6 +180,7 @@ model Order {
   shippingAddress     Json?
   shippingCountryCode String? // denormalized from shippingAddress for routing's region check
   status              String   @default("PENDING_ROUTING") // PENDING_ROUTING | SUBMITTED | PARTIALLY_SUBMITTED | ROUTING_FAILED | CANCELLED
+  correlationId       String? // carried from the triggering webhook's WebhookEvent, threaded through every routing/fulfillment/tracking log for this order (NFR-9)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

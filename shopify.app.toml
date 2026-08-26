@@ -51,6 +51,12 @@ api_version = "2026-07"
   uri = "/webhooks/orders/create"
   topics = [ "orders/create" ]
 
+  # Required per SRS Section 7.1 -- flags already-routed shipments for
+  # merchant follow-up, since the adapter contract has no cancel method
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/cancelled"
+  topics = [ "orders/cancelled" ]
+
   # Mandatory GDPR compliance webhooks (FR-1.4)
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"

@@ -31,6 +31,13 @@ describe("fileDispute", () => {
     );
   });
 
+  it("rejects a dispute type outside the allow-list without ever querying the fulfillment", async () => {
+    await expect(fileDispute("merchant_1", "fulfillment_1", "STOLEN_BY_GREMLINS", "details")).rejects.toThrow(
+      /Invalid dispute type/,
+    );
+    expect(mockedDb.fulfillment.findFirst).not.toHaveBeenCalled();
+  });
+
   it("submits to the partner adapter and records the dispute locally", async () => {
     mockedDb.fulfillment.findFirst.mockResolvedValue({
       id: "fulfillment_1",
@@ -72,6 +79,13 @@ describe("resolveDispute", () => {
     mockedDb.dispute.findFirst.mockResolvedValue(null);
 
     await expect(resolveDispute("merchant_1", "dispute_1", "RESOLVED", "Reprinted")).rejects.toThrow(/not found/);
+  });
+
+  it("rejects a status outside the allow-list without ever querying the dispute", async () => {
+    await expect(resolveDispute("merchant_1", "dispute_1", "MADE_UP_STATUS", "notes")).rejects.toThrow(
+      /Invalid dispute status/,
+    );
+    expect(mockedDb.dispute.findFirst).not.toHaveBeenCalled();
   });
 
   it("updates status and resolution", async () => {

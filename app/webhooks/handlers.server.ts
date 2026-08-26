@@ -4,6 +4,7 @@ import type { WebhookHandler } from "./process.server";
 import { routeOrder } from "../routing/engine.server";
 import type { OrderLineItemSnapshot } from "../routing/types";
 import type { ShippingAddress } from "../partners/types";
+import { notifyMerchant } from "../notifications/notify.server";
 import { logger } from "../utils/logger.server";
 
 export const handleAppUninstalled: WebhookHandler = async (_payload, { shop }) => {
@@ -125,7 +126,10 @@ interface ShopifyOrderPayload {
 // FR-4.1's trigger: ingests the Shopify order, matches its line items against
 // this merchant's imported catalog (unmatched items aren't ours to fulfill and
 // are dropped), snapshots what the routing engine needs, then hands off to it.
-export const handleOrderCreate: WebhookHandler = async (payload, { shop }) => {
+// The webhook's correlationId is stored on the Order and threaded through
+// every routing/fulfillment/tracking log for it (NFR-9) -- see
+// app/routing/engine.server.ts and app/routing/submit.server.ts.
+export const handleOrderCreate: WebhookHandler = async (payload, { shop, correlationId }) => {
   const merchant = await db.merchant.findUnique({ where: { shop } });
   if (!merchant) return;
 
@@ -180,10 +184,52 @@ export const handleOrderCreate: WebhookHandler = async (payload, { shop }) => {
       lineItems: lineItems as unknown as Prisma.InputJsonValue,
       shippingAddress: (shippingAddress as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
       shippingCountryCode: address?.country_code ?? null,
+      correlationId,
     },
   });
 
   await routeOrder(order.id);
+};
+
+interface ShopifyOrderCancelledPayload {
+  id: number;
+  cancel_reason?: string;
+}
+
+// SRS Section 7.1 lists orders/cancelled among the required webhooks; nothing
+// subscribed to it until this audit pass. The adapter contract (Section 7.2)
+// has no cancelOrder method, so there's no way to tell an already-submitted
+// partner to stop production -- this marks the order CANCELLED locally and
+// tells the merchant to follow up with the partner directly, rather than
+// silently doing nothing or inventing an adapter method the SRS never
+// specified.
+export const handleOrderCancelled: WebhookHandler = async (payload, { shop, correlationId }) => {
+  const merchant = await db.merchant.findUnique({ where: { shop } });
+  if (!merchant) return;
+
+  const { id, cancel_reason: cancelReason } = payload as ShopifyOrderCancelledPayload;
+  const shopifyOrderId = String(id);
+
+  const order = await db.order.findUnique({ where: { merchantId_shopifyOrderId: { merchantId: merchant.id, shopifyOrderId } } });
+  if (!order) return; // not one of ours (no matching line items were ever routed)
+
+  await db.order.update({ where: { id: order.id }, data: { status: "CANCELLED" } });
+
+  const fulfillments = await db.fulfillment.findMany({
+    where: { orderId: order.id, status: { in: ["PENDING_SUBMISSION", "QUEUED", "IN_PRODUCTION"] } },
+    include: { partner: true },
+  });
+
+  logger.info("order.cancelled", { correlationId, orderId: order.id, shopifyOrderId, cancelReason });
+
+  for (const fulfillment of fulfillments) {
+    await notifyMerchant({
+      merchantId: merchant.id,
+      type: "ROUTING_FAILURE",
+      message: `Order ${shopifyOrderId} was cancelled in Shopify, but a shipment is already in flight with ${fulfillment.partner.name} (status: ${fulfillment.status}). This app cannot cancel it with the partner automatically -- follow up with them directly.`,
+      metadata: { orderId: order.id, fulfillmentId: fulfillment.id },
+    });
+  }
 };
 
 // Keyed by the SDK's normalized topic (topic.toUpperCase().replace(/\/|\./g, "_")),
@@ -195,4 +241,5 @@ export const WEBHOOK_HANDLERS: Record<string, WebhookHandler> = {
   CUSTOMERS_REDACT: handleCustomersRedact,
   SHOP_REDACT: handleShopRedact,
   ORDERS_CREATE: handleOrderCreate,
+  ORDERS_CANCELLED: handleOrderCancelled,
 };

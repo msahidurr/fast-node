@@ -50,7 +50,12 @@ export async function submitFulfillment(fulfillmentId: string): Promise<void> {
       where: { id: fulfillmentId },
       data: { status: "QUEUED", partnerOrderId: result.partnerOrderId, lastError: null },
     });
-    logger.info("fulfillment.submitted", { fulfillmentId, partnerOrderId: result.partnerOrderId });
+    logger.info("fulfillment.submitted", {
+      fulfillmentId,
+      orderId: fulfillment.orderId,
+      correlationId: fulfillment.order.correlationId,
+      partnerOrderId: result.partnerOrderId,
+    });
   } catch (error) {
     const attempts = fulfillment.attempts + 1;
     const lastError = error instanceof Error ? error.message : String(error);
@@ -65,7 +70,14 @@ export async function submitFulfillment(fulfillmentId: string): Promise<void> {
         nextAttemptAt: new Date(Date.now() + computeBackoffMs(attempts)),
       },
     });
-    logger.error("fulfillment.submit_failed", { fulfillmentId, attempts, exhausted, lastError });
+    logger.error("fulfillment.submit_failed", {
+      fulfillmentId,
+      orderId: fulfillment.orderId,
+      correlationId: fulfillment.order.correlationId,
+      attempts,
+      exhausted,
+      lastError,
+    });
 
     if (exhausted) {
       await notifyMerchant({

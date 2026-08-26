@@ -142,6 +142,7 @@ CREATE TABLE "Order" (
     "shippingAddress" JSONB,
     "shippingCountryCode" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDING_ROUTING',
+    "correlationId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

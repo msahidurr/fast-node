@@ -53,6 +53,8 @@ export async function syncFulfillmentStatuses(): Promise<StatusSyncSummary> {
         });
         logger.info("fulfillment_status.changed", {
           fulfillmentId: fulfillment.id,
+          orderId: fulfillment.orderId,
+          correlationId: fulfillment.order.correlationId,
           from: fulfillment.status,
           to: result.status,
         });
@@ -70,6 +72,8 @@ export async function syncFulfillmentStatuses(): Promise<StatusSyncSummary> {
             ).catch((error) => {
               logger.error("shopify_fulfillment.push_threw", {
                 fulfillmentId: fulfillment.id,
+                orderId: fulfillment.orderId,
+                correlationId: fulfillment.order.correlationId,
                 error: error instanceof Error ? error.message : String(error),
               });
               return false;
@@ -110,6 +114,8 @@ export async function syncFulfillmentStatuses(): Promise<StatusSyncSummary> {
     } catch (error) {
       logger.error("fulfillment_status.sync_failed", {
         fulfillmentId: fulfillment.id,
+        orderId: fulfillment.orderId,
+        correlationId: fulfillment.order.correlationId,
         error: error instanceof Error ? error.message : String(error),
       });
     }

@@ -4,10 +4,10 @@ vi.mock("../db.server", () => ({
   default: {
     session: { deleteMany: vi.fn(), updateMany: vi.fn() },
     merchant: { findUnique: vi.fn(), delete: vi.fn() },
-    order: { findMany: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
+    order: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
     product: { findMany: vi.fn(), deleteMany: vi.fn() },
     dispute: { deleteMany: vi.fn() },
-    fulfillment: { deleteMany: vi.fn() },
+    fulfillment: { deleteMany: vi.fn(), findMany: vi.fn() },
     routingDecision: { deleteMany: vi.fn() },
     markupRule: { deleteMany: vi.fn() },
     merchantNotification: { deleteMany: vi.fn() },
@@ -19,12 +19,18 @@ vi.mock("../routing/engine.server", () => ({
   routeOrder: vi.fn(),
 }));
 
+vi.mock("../notifications/notify.server", () => ({
+  notifyMerchant: vi.fn(),
+}));
+
 import db from "../db.server";
 import { routeOrder } from "../routing/engine.server";
+import { notifyMerchant } from "../notifications/notify.server";
 import {
   handleAppUninstalled,
   handleCustomersDataRequest,
   handleCustomersRedact,
+  handleOrderCancelled,
   handleOrderCreate,
   handleScopesUpdate,
   handleShopRedact,
@@ -32,6 +38,7 @@ import {
 
 const mockedDb = vi.mocked(db, true);
 const mockedRouteOrder = vi.mocked(routeOrder);
+const mockedNotifyMerchant = vi.mocked(notifyMerchant);
 
 const CTX = { shop: "test.myshopify.com", topic: "TEST", correlationId: "corr_1" };
 
@@ -196,6 +203,7 @@ describe("handleOrderCreate", () => {
         create: expect.objectContaining({
           merchantId: "merchant_1",
           shopifyOrderId: "1001",
+          correlationId: CTX.correlationId,
           lineItems: [
             { variantGid: "gid://shopify/ProductVariant/501", sku: "SKU-A", quantity: 2, title: "Item A", artworkUrl: "/mockups/a.png" },
           ],
@@ -203,5 +211,51 @@ describe("handleOrderCreate", () => {
       }),
     );
     expect(mockedRouteOrder).toHaveBeenCalledWith("order_1");
+  });
+});
+
+describe("handleOrderCancelled", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("does nothing when the shop has no Merchant row", async () => {
+    mockedDb.merchant.findUnique.mockResolvedValue(null);
+    await handleOrderCancelled({ id: 1001 }, CTX);
+    expect(mockedDb.order.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the order was never routed by this app", async () => {
+    mockedDb.merchant.findUnique.mockResolvedValue({ id: "merchant_1" } as never);
+    mockedDb.order.findUnique.mockResolvedValue(null);
+
+    await handleOrderCancelled({ id: 1001 }, CTX);
+
+    expect(mockedDb.order.update).not.toHaveBeenCalled();
+  });
+
+  it("marks the order CANCELLED and does not notify when nothing is in flight", async () => {
+    mockedDb.merchant.findUnique.mockResolvedValue({ id: "merchant_1" } as never);
+    mockedDb.order.findUnique.mockResolvedValue({ id: "order_1" } as never);
+    mockedDb.fulfillment.findMany.mockResolvedValue([]);
+
+    await handleOrderCancelled({ id: 1001 }, CTX);
+
+    expect(mockedDb.order.update).toHaveBeenCalledWith({ where: { id: "order_1" }, data: { status: "CANCELLED" } });
+    expect(mockedNotifyMerchant).not.toHaveBeenCalled();
+  });
+
+  it("notifies the merchant once per in-flight shipment, since the adapter contract has no cancel method", async () => {
+    mockedDb.merchant.findUnique.mockResolvedValue({ id: "merchant_1" } as never);
+    mockedDb.order.findUnique.mockResolvedValue({ id: "order_1" } as never);
+    mockedDb.fulfillment.findMany.mockResolvedValue([
+      { id: "fulfillment_1", status: "QUEUED", partner: { name: "Mock Partner" } },
+      { id: "fulfillment_2", status: "IN_PRODUCTION", partner: { name: "Other Partner" } },
+    ] as never);
+
+    await handleOrderCancelled({ id: 1001, cancel_reason: "customer" }, CTX);
+
+    expect(mockedNotifyMerchant).toHaveBeenCalledTimes(2);
+    expect(mockedNotifyMerchant).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId: "merchant_1", type: "ROUTING_FAILURE", metadata: { orderId: "order_1", fulfillmentId: "fulfillment_1" } }),
+    );
   });
 });
