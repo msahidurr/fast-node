@@ -75,14 +75,26 @@ This template is configured with the Shopify Dev MCP. This instructs [Cursor](ht
 
 For more information on the Shopify Dev MCP please read [the documentation](https://shopify.dev/docs/apps/build/devmcp).
 
+## Local development
+
+Copy `.env.example` to `.env` and fill in `SHOPIFY_API_KEY`/`SHOPIFY_API_SECRET` (from `shopify app config link`) and `ENCRYPTION_KEY` (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`).
+
+Start a local Postgres instance with:
+
+```shell
+docker compose up -d db
+npx prisma migrate deploy
+```
+
+Then run `npm run dev` as usual. Failed/pending webhooks in the durable queue (see `app/webhooks/`) can be retried out-of-band with `npm run queue:process` — this is meant to be invoked periodically by an external scheduler in production, since the app itself runs as a single process.
+
 ## Deployment
 
 ### Application Storage
 
-This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
+This app uses [Prisma](https://www.prisma.io/) with a [PostgreSQL](https://www.postgresql.org/) datasource (`DATABASE_URL`) to store session data and the durable webhook queue.
 The database is defined as a Prisma schema in `prisma/schema.prisma`.
 
-This use of SQLite works in production if your app runs as a single instance.
 The database that works best for you depends on the data your app needs and how it is queried.
 Here’s a short list of databases providers that provide a free tier to get started:
 

@@ -15,6 +15,12 @@ export default async function handleRequest(
   reactRouterContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
+  // NFR-5: baseline transport hardening beyond Shopify's own CSP
+  // (frame-ancestors, set above). Not X-Frame-Options -- that would conflict
+  // with legitimate embedding, which the CSP already governs correctly.
+  responseHeaders.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+  responseHeaders.set("X-Content-Type-Options", "nosniff");
+  responseHeaders.set("Referrer-Policy", "strict-origin-when-cross-origin");
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"

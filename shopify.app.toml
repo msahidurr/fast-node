@@ -7,7 +7,8 @@ embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+# Minimum scopes per SRS FR-1.2 (products, orders, fulfillments, inventory, shipping)
+scopes = "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_inventory,read_shipping,write_metaobjects,write_metaobject_definitions"
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
@@ -34,7 +35,8 @@ name = "Description"
 type = "multi_line_text_field"
 
 [webhooks]
-api_version = "2026-10"
+# Matches the installed @shopify/shopify-api ApiVersion enum (highest available is 2026-07)
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
@@ -43,6 +45,24 @@ api_version = "2026-10"
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
+
+  # Order routing trigger (FR-4.1)
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/create"
+  topics = [ "orders/create" ]
+
+  # Mandatory GDPR compliance webhooks (FR-1.4)
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  topics = [ "shop/redact" ]
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]

@@ -15,12 +15,20 @@ database.sqlite
 
 .env
 .env.*
+!.env.example
 
 
 
 
 
 /extensions/*/dist
+
+# csv-sftp partner adapter's simulated outbound SFTP drop (runtime-generated)
+/data/partners/csv-sftp/outbound/
+
+# generated mockups + their lazily-built template base images (runtime-generated)
+/data/mockups/
+/data/mockup-templates/
 
 # Ignore shopify files created during app dev
 .shopify/*
